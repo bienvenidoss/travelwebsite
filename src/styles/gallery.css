@@ -1,81 +1,50 @@
 .gallery-container {
-  height: 100vh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch; /* For smooth scrolling on iOS */
+  width: 100%;
+  max-width: 100%;
+  min-height: 100vh;
   padding: 20px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
 }
 
-.masonry-grid {
-  display: flex;
-  width: 100%;
-  height: auto;
-}
-
-/* Ensure the page itself allows scrolling */
-html, body {
-  height: 100%;
-  margin: 0;
-  overflow: auto;
-}
-
-#root {
-  height: 100%;
-}
-
 .gallery-container h2 {
-  padding: 1rem 2rem;
-  margin: 0;
-  font-size: 2rem;
-  font-weight: 600;
-  color: #333;
+  margin-bottom: 20px;
+}
+
+.error-message {
+  color: #dc3545;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background-color: #f8d7da;
+  border-radius: 4px;
 }
 
 .loading-container {
   display: flex;
-  flex-direction: column;
-  align-items: center;
   justify-content: center;
-  min-height: 300px;
-  gap: 1rem;
-}
-
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid #f3f3f3;
-  border-top: 3px solid #007bff;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 3rem;
-  background-color: #f8f9fa;
+  align-items: center;
+  min-height: 200px;
   color: #666;
 }
 
-.error-message {
-  padding: 1rem 2rem;
-  margin: 1rem;
-  background-color: #fff3f3;
-  border: 1px solid #dc3545;
-  border-radius: 4px;
-  color: #dc3545;
+.empty-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+  color: #666;
+  background-color: #f8f9fa;
+  border-radius: 8px;
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Responsive adjustments */
 @media (max-width: 768px) {
-  .gallery-container h2 {
-    padding: 0.5rem 1rem;
-    font-size: 1.5rem;
+  .gallery-container {
+    padding: 10px;
   }
+}
+
+.gallery-container > div {
+  width: 100%;
+  max-width: 100%;
 } 
