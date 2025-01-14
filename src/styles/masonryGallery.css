@@ -1,0 +1,226 @@
+.grid {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.grid-column {
+  float: left;
+  box-sizing: border-box;
+  padding: 0;
+}
+
+.grid-item {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5px;
+  position: relative;
+  cursor: default;
+}
+
+.grid-item.selectable {
+  cursor: pointer;
+}
+
+.grid-item.selected .grid-item-content::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 123, 255, 0.3);
+  z-index: 2;
+}
+
+.grid-item-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #f0f0f0;
+}
+
+.delete-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 0, 0, 0.8);
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  z-index: 3;
+  padding: 0;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-button:hover {
+  background: rgba(255, 0, 0, 1);
+}
+
+.delete-confirm {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 1rem;
+  border-radius: 4px;
+  text-align: center;
+  z-index: 4;
+}
+
+.delete-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.delete-actions button {
+  padding: 0.25rem 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.delete-actions button:first-child {
+  background: #dc3545;
+  color: white;
+}
+
+.delete-actions button:last-child {
+  background: #6c757d;
+  color: white;
+}
+
+.select-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background: #007bff;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+}
+
+.gallery-actions {
+  padding: 1rem;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.gallery-actions button {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.select-mode-button {
+  background: #6c757d;
+  color: white;
+}
+
+.edit-selected-button {
+  background: #007bff;
+  color: white;
+}
+
+.delete-selected-button {
+  background: #dc3545;
+  color: white;
+}
+
+.color-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transition: opacity 0.3s ease;
+}
+
+.media-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity 0.3s ease;
+}
+
+/* Loading animation */
+.grid-item-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  animation: loading 1.5s infinite;
+  z-index: 1;
+  opacity: 0;
+}
+
+.grid-item:not(:has(.media-content[style*="opacity: 1"])) .grid-item-content::before {
+  opacity: 1;
+}
+
+@keyframes loading {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 200%;
+  }
+}
+
+/* Clear fix */
+.grid:after {
+  content: '';
+  display: block;
+  clear: both;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .grid-item {
+    padding: 0.25px;
+  }
+  
+  .gallery-actions {
+    flex-wrap: wrap;
+    padding: 0.5rem;
+  }
+  
+  .gallery-actions button {
+    font-size: 0.9rem;
+    padding: 0.4rem 0.8rem;
+  }
+} 
