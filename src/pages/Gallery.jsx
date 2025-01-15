@@ -61,70 +61,120 @@ function Gallery() {
   }, [user]);
 
   const updateEntryWithRetry = async (entryKey, itemsToDelete, maxRetries = 3) => {
+    let lastVersion = null;
+    let datastoreVersions = new Map(); // Track versions for each datastore
+    
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const entry = await listDocs({
+        // Get fresh versions of all affected datastores
+        const response = await listDocs({
           collection: "travel_entries",
           filter: { key: entryKey }
         });
 
-        if (!entry.items.length) {
-          throw new Error('Entry not found');
+        if (!response.items.length) {
+          console.error('🚫 Entry not found:', entryKey);
+          return { success: false, error: 'Entry not found' };
         }
 
-        const currentEntry = entry.items[0];
-        const currentMedia = currentEntry.data.media || [];
+        const currentEntry = response.items[0];
+        const currentVersion = currentEntry.version;
+        
+        // Track datastore version
+        const currentStoreVersion = datastoreVersions.get(entryKey);
+        if (currentStoreVersion && currentStoreVersion === currentVersion) {
+          console.warn('⚠️ Version conflict for datastore:', entryKey);
+          await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+          continue;
+        }
+        
+        datastoreVersions.set(entryKey, currentVersion);
 
-        console.log('📝 Current document state:', {
+        console.log('📝 Processing datastore:', {
           key: entryKey,
-          mediaCount: currentMedia.length,
-          itemsToRemove: itemsToDelete.length
+          version: currentVersion.toString(),
+          attempt: attempt + 1,
+          itemCount: currentEntry.data.media?.length || 0
         });
 
-        const updatedMedia = currentMedia.filter(media => 
-          !itemsToDelete.some(item => item.fullPath === media.fullPath)
+        // Filter items to delete for this specific datastore
+        const datastoreItemsToDelete = itemsToDelete.filter(item => 
+          item.entryKey === entryKey
         );
 
-        console.log('📊 Update check:', {
-          originalCount: currentMedia.length,
+        const updatedMedia = (currentEntry.data.media || []).filter(mediaItem => 
+          !datastoreItemsToDelete.some(item => item.fullPath === mediaItem.fullPath)
+        );
+
+        console.log('📊 Update check for datastore:', {
+          key: entryKey,
+          originalCount: currentEntry.data.media?.length,
           remainingCount: updatedMedia.length,
-          removedCount: currentMedia.length - updatedMedia.length
+          toRemove: datastoreItemsToDelete.length
         });
 
+        // Skip if no changes for this datastore
+        if (updatedMedia.length === currentEntry.data.media?.length) {
+          console.log('ℹ️ No changes needed for datastore:', entryKey);
+          return { success: true, unchanged: true };
+        }
+
+        const updatePayload = {
+          collection: "travel_entries",
+          doc: {
+            key: entryKey,
+            data: {
+              ...currentEntry.data,
+              media: updatedMedia
+            },
+            version: currentVersion
+          }
+        };
+
         if (updatedMedia.length === 0) {
-          // If no media items remain, delete the entire document
-          console.log('🗑️ Deleting document as no media items remain');
+          console.log('🗑️ Deleting empty datastore:', entryKey);
           await deleteDoc({
             collection: "travel_entries",
             doc: {
               key: entryKey,
-              version: currentEntry.version
+              version: currentVersion
             }
           });
         } else {
-          // Otherwise, update the document with the remaining media items
-          console.log('📝 Updating document with remaining media items');
-          await setDoc({
-            collection: "travel_entries",
-            doc: {
-              key: entryKey,
-              data: {
-                ...currentEntry.data,
-                media: updatedMedia
-              },
-              version: currentEntry.version
-            }
-          });
+          console.log('📝 Updating datastore:', entryKey);
+          await setDoc(updatePayload);
         }
 
-        return true;
+        return { 
+          success: true, 
+          itemsProcessed: datastoreItemsToDelete.length 
+        };
+
       } catch (err) {
-        console.error(`❌ Attempt ${attempt + 1} failed:`, err);
-        if (attempt === maxRetries - 1) throw err;
+        const isVersionError = err.message?.includes('error_version_outdated_or_future');
+        console.error(`❌ Attempt ${attempt + 1} failed for datastore ${entryKey}:`, {
+          error: err,
+          isVersionError,
+          datastoreVersions: Array.from(datastoreVersions.entries())
+        });
+
+        if (isVersionError) {
+          // Clear tracked version on version error
+          datastoreVersions.delete(entryKey);
+          await new Promise(resolve => 
+            setTimeout(resolve, 1000 * Math.pow(2, attempt))
+          );
+          continue;
+        }
+
+        if (attempt === maxRetries - 1) {
+          return { success: false, error: err.message };
+        }
+        
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
-    return false;
+    return { success: false, error: 'Max retries exceeded' };
   };
 
   const handleDelete = async (item) => {
@@ -142,25 +192,19 @@ function Gallery() {
   const deleteSelectedItems = async () => {
     if (selectedItems.size === 0) return;
 
-    // First remove any existing toast
-    if (activeToastRef.current) {
-      removeToast(activeToastRef.current);
-    }
-
     const toastId = Date.now();
     activeToastRef.current = toastId;
     
-    console.log('🗑️ Starting deletion process for', selectedItems.size, 'items');
-    
     addToast({
       id: toastId,
-      message: `Deleting ${selectedItems.size} items...`,
+      message: `Preparing to delete ${selectedItems.size} items...`,
       type: 'info',
       persistent: true,
       progress: 0
     });
 
     try {
+      // Group items by datastore
       const itemsByEntry = Array.from(selectedItems).reduce((acc, item) => {
         if (!acc[item.entryKey]) {
           acc[item.entryKey] = [];
@@ -169,74 +213,56 @@ function Gallery() {
         return acc;
       }, {});
 
+      console.log('📦 Processing datastores:', Object.keys(itemsByEntry).length);
+
       let processedItems = 0;
+      let failedItems = 0;
       const totalItems = selectedItems.size;
 
+      // Process each datastore sequentially
       for (const [entryKey, items] of Object.entries(itemsByEntry)) {
-        const success = await updateEntryWithRetry(entryKey, items);
-        if (success) {
-          processedItems += items.length;
-          
-          // Update progress toast
-          if (activeToastRef.current === toastId) {
+        const result = await updateEntryWithRetry(entryKey, items);
+        
+        if (result.success) {
+          if (!result.unchanged) {
+            processedItems += result.itemsProcessed || 0;
             updateToast(toastId, {
               message: `Deleting items... (${processedItems}/${totalItems})`,
-              type: 'info',
-              persistent: true,
               progress: Math.round((processedItems / totalItems) * 100)
             });
           }
+        } else {
+          console.error(`Failed to process datastore ${entryKey}:`, result.error);
+          failedItems += items.length;
         }
       }
 
-      // Update local state
-      setEntries(current => 
-        current.filter(item => !selectedItems.has(item))
-      );
-      
-      // Refresh the datastore
+      // Refresh all datastores
       await loadDatastore();
-
-      // Show final success toast and remove after delay
-      if (activeToastRef.current === toastId) {
-        updateToast(toastId, {
-          message: `Successfully deleted ${processedItems} items`,
-          type: 'success',
-          persistent: false,
-          progress: 100,
-          duration: 3000
-        });
-
-        // Remove toast after duration
-        setTimeout(() => {
-          if (activeToastRef.current === toastId) {
-            removeToast(toastId);
-            activeToastRef.current = null;
-          }
-        }, 3000);
-      }
-
-      // Clear selection
-      setSelectedItems(new Set());
       
-    } catch (err) {
-      console.error('❌ Failed to delete items:', err);
-      if (activeToastRef.current === toastId) {
-        updateToast(toastId, {
-          message: `Failed to delete items: ${err.message}`,
-          type: 'error',
-          persistent: false,
-          duration: 3000
-        });
+      // Show final status
+      const message = failedItems > 0 
+        ? `Deleted ${processedItems} items, ${failedItems} failed`
+        : `Successfully deleted ${processedItems} items`;
 
-        // Remove error toast after duration
-        setTimeout(() => {
-          if (activeToastRef.current === toastId) {
-            removeToast(toastId);
-            activeToastRef.current = null;
-          }
-        }, 3000);
-      }
+      updateToast(toastId, {
+        message,
+        type: failedItems > 0 ? 'warning' : 'success',
+        persistent: false,
+        progress: 100,
+        duration: 3000
+      });
+
+      setSelectedItems(new Set());
+
+    } catch (err) {
+      console.error('❌ Delete operation failed:', err);
+      updateToast(toastId, {
+        message: `Operation failed: ${err.message}`,
+        type: 'error',
+        persistent: false,
+        duration: 3000
+      });
     }
   };
 
