@@ -1,176 +1,121 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
+import Packery from 'packery';
 import '../styles/masonryGallery.css';
 
 function MasonryGallery({ items, onDelete }) {
-  const [columns, setColumns] = useState([]);
-  const [selectedItems, setSelectedItems] = useState(new Set());
-  const [isSelectMode, setIsSelectMode] = useState(false);
-  const containerRef = useRef(null);
+  const gridRef = useRef(null);
+  const packeryRef = useRef(null);
 
   useEffect(() => {
-    console.log('🎨 MasonryGallery mounted with', items.length, 'items');
-    calculateLayout();
-    
-    const handleResize = () => {
-      console.log('📏 Window resized, recalculating layout');
-      calculateLayout();
+    if (!items?.length || !gridRef.current) return;
+
+    console.log('🏗️ Creating Packery instance');
+    packeryRef.current = new Packery(gridRef.current, {
+      itemSelector: '.grid-item',
+      gutter: -1,
+      percentPosition: true,
+      initLayout: true,
+      resize: true
+    });
+
+    setTimeout(() => {
+      packeryRef.current?.layout();
+    }, 100);
+
+    return () => {
+      if (packeryRef.current) {
+        console.log('🧹 Cleaning up Packery instance');
+        packeryRef.current.destroy();
+      }
     };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
   }, [items]);
 
-  const calculateLayout = () => {
-    if (!containerRef.current) return;
-    
-    const containerWidth = containerRef.current.offsetWidth;
-    const minColumnWidth = 300;
-    const maxColumns = 4;
-    
-    // Calculate number of columns based on container width
-    const columnCount = Math.min(
-      maxColumns,
-      Math.max(1, Math.floor(containerWidth / minColumnWidth))
-    );
-    
-    console.log('📏 Container width:', containerWidth, 'Columns:', columnCount);
-    
-    // Initialize columns
-    const newColumns = Array(columnCount).fill().map(() => []);
-    
-    // Distribute items to achieve balanced column heights
-    items.forEach((item) => {
-      const shortestColumn = newColumns.reduce((minCol, col, i) => {
-        const currentHeight = col.reduce((sum, item) => sum + (1 / item.ratio), 0);
-        const minHeight = newColumns[minCol].reduce((sum, item) => sum + (1 / item.ratio), 0);
-        return currentHeight < minHeight ? i : minCol;
-      }, 0);
-      
-      newColumns[shortestColumn].push(item);
-    });
+  const getItemDimensions = (ratio) => {
+    const division = 1;
+    const baseWidth = 19.80;
+    const isWide = ratio > 1.15;
 
-    setColumns(newColumns);
-  };
-
-  const toggleSelectMode = () => {
-    console.log('🔄 Toggling select mode:', !isSelectMode);
-    setIsSelectMode(!isSelectMode);
-    if (isSelectMode) {
-      setSelectedItems(new Set());
-    }
-  };
-
-  const toggleItemSelection = (item) => {
-    if (!isSelectMode) return;
-    
-    console.log('🎯 Toggling selection for item:', item.key);
-    setSelectedItems(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(item.key)) {
-        newSet.delete(item.key);
-        console.log('❌ Removed item from selection:', item.key);
-      } else {
-        newSet.add(item.key);
-        console.log('✅ Added item to selection:', item.key);
-      }
-      return newSet;
-    });
-  };
-
-  const handleDeleteSelected = () => {
-    console.log('🗑️ Delete button clicked');
-    const itemsToDelete = Array.from(selectedItems).map(key => 
-      items.find(item => item.key === key)
-    ).filter(Boolean);
-    
-    console.log('📦 Items prepared for deletion:', itemsToDelete);
-    
-    if (itemsToDelete.length === 0) {
-      console.warn('⚠️ No items selected for deletion');
-      return;
-    }
-
-    if (window.confirm(`Are you sure you want to delete ${itemsToDelete.length} items?`)) {
-      console.log('✅ User confirmed deletion');
-      onDelete(itemsToDelete);
-      setSelectedItems(new Set());
-      setIsSelectMode(false);
+    if (isWide) {
+      return {
+        width: `calc(${baseWidth * 2}vw + 1px)`,
+        height: `calc(${(baseWidth * 2) / ratio}vw + 1px)`,
+        isWide
+      };
+    } else if (ratio < 0.85) {
+      return {
+        width: `calc(${baseWidth}vw + 1px)`,
+        height: `calc(${baseWidth / ratio}vw + 1px)`,
+        isWide: false
+      };
     } else {
-      console.log('❌ User cancelled deletion');
+      return {
+        width: `calc(${baseWidth}vw + 1px)`,
+        height: `calc(${baseWidth / ratio}vw + 1px)`,
+        isWide: false
+      };
     }
   };
 
   return (
-    <div className="masonry-container">
-      <div className="gallery-actions">
-        <button 
-          className="select-mode-button"
-          onClick={toggleSelectMode}
-        >
-          {isSelectMode ? 'Cancel Selection' : 'Select Items'}
-        </button>
-        
-        {isSelectMode && selectedItems.size > 0 && (
-          <button 
-            className="delete-selected-button"
-            onClick={handleDeleteSelected}
-          >
-            Delete Selected ({selectedItems.size})
-          </button>
-        )}
-      </div>
+    <div className="masonry-wrapper">
+      <div 
+        className="grid" 
+        ref={gridRef}
+        style={{
+          width: '100%',
+          maxWidth: '1200px',
+          margin: '0 auto'
+        }}
+      >
+        {items.map((item, index) => {
+          const ratio = item.width / item.height;
+          const { width, height, isWide } = getItemDimensions(ratio);
+          const isFirstItem = index === 0;
 
-      <div className="grid" ref={containerRef}>
-        {columns.map((column, columnIndex) => (
-          <div 
-            key={columnIndex}
-            className="grid-column"
-          >
-            {column.map(item => (
-              <div
-                key={item.key}
-                className={`grid-item ${isSelectMode ? 'selectable' : ''} ${
-                  selectedItems.has(item.key) ? 'selected' : ''
-                }`}
-                onClick={() => toggleItemSelection(item)}
-                style={{
-                  backgroundColor: item.backgroundColor,
-                  aspectRatio: item.ratio
-                }}
-              >
-                <div className="grid-item-content">
-                  {item.type?.startsWith('image/') ? (
-                    <img
-                      src={item.downloadUrl}
-                      alt=""
-                      className="media-content"
-                      loading="lazy"
-                      onLoad={(e) => {
-                        e.target.style.opacity = 1;
-                      }}
-                      style={{ opacity: 0 }}
-                    />
-                  ) : item.type?.startsWith('video/') ? (
-                    <video
-                      src={item.downloadUrl}
-                      className="media-content"
-                      controls
-                      loading="lazy"
-                      onLoadedData={(e) => {
-                        e.target.style.opacity = 1;
-                      }}
-                      style={{ opacity: 0 }}
-                    />
-                  ) : null}
-
-                  {selectedItems.has(item.key) && (
-                    <div className="select-indicator">✓</div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        ))}
+          return (
+            <div 
+              key={item.key || item.fullPath}
+              className={`grid-item ${isWide ? 'wide' : ''}`}
+              style={{
+                width,
+                height,
+                backgroundColor: item.backgroundColor || '#f0f0f0',
+                border: '1px solid white',
+                boxSizing: 'border-box',
+                position: isFirstItem ? 'relative' : 'absolute',
+                left: isFirstItem ? 'unset' : undefined,
+                right: isFirstItem ? 'unset' : undefined,
+                margin: 0,
+                padding: 0,
+                overflow: 'hidden'
+              }}
+            >
+              {item.type?.includes('video') ? (
+                <video 
+                  src={item.downloadUrl} 
+                  controls 
+                  className="media-element"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover'
+                  }}
+                />
+              ) : (
+                <img 
+                  src={item.downloadUrl} 
+                  alt={item.originalName || ''} 
+                  className="media-element"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover'
+                  }}
+                />
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
