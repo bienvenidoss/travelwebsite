@@ -11,6 +11,7 @@
   cursor: pointer;
   transition: all 0.3s ease;
   background-color: #fafafa;
+  margin-bottom: 1rem;
 }
 
 .dropzone.active {
@@ -32,9 +33,9 @@
 
 .preview-item {
   position: relative;
+  aspect-ratio: 1;
   border-radius: 8px;
   overflow: hidden;
-  aspect-ratio: 1;
 }
 
 .preview-image,
@@ -61,6 +62,7 @@
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  z-index: 2;
 }
 
 .remove-file:hover {

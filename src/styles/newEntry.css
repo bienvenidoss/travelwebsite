@@ -1,6 +1,12 @@
+.entry-page {
+  height: 100%;
+  overflow-y: auto;
+  padding: 2rem;
+}
+
 .entry-form {
   max-width: 800px;
-  margin: 2rem auto;
+  margin: 0 auto 2rem auto;
   padding: 2rem;
   background-color: white;
   border-radius: 8px;
@@ -91,6 +97,8 @@
 }
 
 .submit-button {
+  position: sticky;
+  bottom: 1rem;
   width: 100%;
   padding: 1rem;
   background-color: #007bff;
@@ -101,6 +109,8 @@
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.3s ease;
+  margin-top: 1rem;
+  z-index: 10;
 }
 
 .submit-button:hover:not(:disabled) {
@@ -118,4 +128,10 @@
     margin: 1rem;
     padding: 1rem;
   }
+}
+
+/* Ensure the file upload container is visible */
+.file-upload-container {
+  margin: 1rem 0;
+  width: 100%;
 } 

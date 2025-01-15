@@ -1,0 +1,10 @@
+.map-page {
+  height: 100%;
+  overflow-y: auto;
+  padding: 2rem;
+}
+
+.map-debug-container {
+  max-width: 1200px;
+  margin: 0 auto;
+} 

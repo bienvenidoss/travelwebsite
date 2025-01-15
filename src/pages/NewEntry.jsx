@@ -4,6 +4,7 @@ import FileUpload from '../components/FileUpload';
 import { useAuth } from '../contexts/AuthContext';
 import { saveEntry } from '../utils/storage';
 import '../styles/newEntry.css';
+import { useToast } from '../contexts/ToastContext';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -28,6 +29,7 @@ function NewEntry() {
     totalFiles: 0,
     currentBatch: { start: 0, end: 0 }
   });
+  const { addToast, updateToast } = useToast();
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -77,11 +79,27 @@ function NewEntry() {
       currentBatch: progress.currentBatch,
       currentFile: `Processing files ${progress.currentBatch.start + 1} to ${progress.currentBatch.end} of ${progress.total}`
     }));
+
+    if (window.activeToastId) {
+      updateToast(window.activeToastId, {
+        progress: progress.progress,
+        message: `Uploading: ${progress.processed}/${progress.total} files`
+      });
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (loading) return;
+    const toastId = Date.now();
+    window.activeToastId = toastId;
+
+    addToast({
+      id: toastId,
+      message: 'Creating new entry...',
+      type: 'info',
+      persistent: true,
+      progress: 0
+    });
 
     try {
       setLoading(true);
@@ -107,16 +125,31 @@ function NewEntry() {
         currentFile: 'Upload complete!'
       }));
 
+      // Update final toast
+      updateToast(toastId, {
+        message: 'Entry created successfully!',
+        type: 'success',
+        persistent: false,
+        duration: 3000
+      });
+
       // Navigate after a brief delay to show completion
       setTimeout(() => {
-        navigate('/map');
+        navigate('/gallery');
       }, 1000);
-
+      
     } catch (error) {
       console.error('Error creating entry:', error);
       setError(error.message || 'Failed to create entry. Please try again.');
+      updateToast(toastId, {
+        message: 'Failed to create entry',
+        type: 'error',
+        persistent: false,
+        duration: 5000
+      });
     } finally {
       setLoading(false);
+      window.activeToastId = null;
     }
   };
 
@@ -129,7 +162,7 @@ function NewEntry() {
   }
 
   return (
-    <div className="container">
+    <div className="container entry-page">
       <h2>Create New Travel Entry</h2>
       <form onSubmit={handleSubmit} className="entry-form">
         {error && (
@@ -226,7 +259,7 @@ function NewEntry() {
         <button 
           type="submit" 
           className="submit-button" 
-          disabled={loading || formData.files.length === 0}
+          disabled={loading || !formData.title || !formData.date}
         >
           {loading ? 'Creating Entry...' : 'Create Entry'}
         </button>

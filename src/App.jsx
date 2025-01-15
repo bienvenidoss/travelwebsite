@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { initJuno } from '@junobuild/core';
 import { AuthProvider } from './contexts/AuthContext';
+import { ToastProvider } from './contexts/ToastContext';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import NewEntry from './pages/NewEntry';
@@ -18,19 +19,21 @@ function App() {
 
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <div className="app">
-          <Navbar />
-          <main className="main-content">
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/new-entry" element={<NewEntry />} />
-              <Route path="/map" element={<Map />} />
-              <Route path="/gallery" element={<Gallery />} />
-            </Routes>
-          </main>
-        </div>
-      </BrowserRouter>
+      <ToastProvider>
+        <BrowserRouter>
+          <div className="app">
+            <Navbar />
+            <main className="main-content">
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/new-entry" element={<NewEntry />} />
+                <Route path="/map" element={<Map />} />
+                <Route path="/gallery" element={<Gallery />} />
+              </Routes>
+            </main>
+          </div>
+        </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   );
 }

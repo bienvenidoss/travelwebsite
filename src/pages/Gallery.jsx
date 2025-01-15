@@ -3,6 +3,7 @@ import { listDocs, deleteDoc, getDoc, setDoc, deleteAsset } from '@junobuild/cor
 import MasonryGallery from '../components/MasonryGallery';
 import { useAuth } from '../contexts/AuthContext';
 import '../styles/gallery.css';
+import { useToast } from '../contexts/ToastContext';
 
 function Gallery() {
   const [entries, setEntries] = useState([]);
@@ -10,6 +11,13 @@ function Gallery() {
   const [error, setError] = useState(null);
   const { user, isLoading: authLoading } = useAuth();
   const [deletingItems, setDeletingItems] = useState(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deletionStatus, setDeletionStatus] = useState({
+    total: 0,
+    processed: 0,
+    failed: 0
+  });
+  const { addToast, updateToast, removeToast } = useToast();
 
   useEffect(() => {
     if (user && !authLoading) {
@@ -24,180 +32,157 @@ function Gallery() {
       setLoading(true);
       setError(null);
       
+      console.log('📚 Fetching entries from datastore');
       const response = await listDocs({
         collection: "travel_entries",
       });
 
+      // Process all media items with their entry context
       const allMedia = response.items.reduce((acc, entry) => {
         if (!entry.data.media || !Array.isArray(entry.data.media)) return acc;
-        const mediaWithKeys = entry.data.media
+        
+        const mediaWithMetadata = entry.data.media
           .filter(media => !deletingItems.has(media.fullPath))
           .map(media => ({
             ...media,
             entryKey: entry.key,
-            key: `${entry.key}-${media.fullPath}`
+            key: `${entry.key}-${media.fullPath}`,
+            // Pre-calculate aspect ratio and dominant color
+            ratio: media.width / media.height,
+            backgroundColor: media.colors?.[0] ? 
+              `rgb(${media.colors[0].r}, ${media.colors[0].g}, ${media.colors[0].b})` : 
+              '#f0f0f0'
           }));
-        return [...acc, ...mediaWithKeys];
+        return [...acc, ...mediaWithMetadata];
       }, []);
 
+      console.log(`📊 Processed ${allMedia.length} media items`);
       setEntries(allMedia);
     } catch (err) {
-      setError('Failed to load gallery items');
+      console.error('❌ Failed to load entries:', err);
+      setError('Failed to load gallery');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDelete = async (mediaToDeleteList) => {
-    console.log('🔍 Received items for deletion:', mediaToDeleteList);
-
-    // Group items by their entryKey (datastore)
-    const itemsByDatastore = mediaToDeleteList.reduce((acc, item) => {
-      const entryKey = item.entryKey;
-      if (!acc[entryKey]) {
-        acc[entryKey] = [];
-      }
-      acc[entryKey].push(item);
-      return acc;
-    }, {});
-
-    console.log('📑 Grouped by datastore:', itemsByDatastore);
+  const handleDelete = async (itemsToDelete) => {
+    const toastId = Date.now();
+    addToast({
+      id: toastId,
+      message: `Deleting ${itemsToDelete.length} items...`,
+      type: 'info',
+      persistent: true,
+      progress: 0
+    });
 
     try {
-      // Mark all items as being deleted in UI
-      const allPaths = mediaToDeleteList.map(item => item.fullPath);
-      setDeletingItems(prev => new Set([...prev, ...allPaths]));
+      setIsDeleting(true);
+      setDeletionStatus({
+        total: itemsToDelete.length,
+        processed: 0,
+        failed: 0
+      });
 
-      // Handle each datastore's items separately
-      for (const [entryKey, items] of Object.entries(itemsByDatastore)) {
-        console.log(`🗂️ Processing datastore ${entryKey} with ${items.length} items`);
-        
-        // 1. Get document for this datastore
-        const doc = await getDoc({
-          collection: "travel_entries",
-          key: entryKey
-        });
-
-        if (!doc) {
-          console.error('❌ Document not found:', entryKey);
-          continue; // Skip this datastore but continue with others
+      // Group items by their entryKey
+      const itemsByEntry = itemsToDelete.reduce((acc, item) => {
+        if (!acc[item.entryKey]) {
+          acc[item.entryKey] = [];
         }
+        acc[item.entryKey].push(item);
+        return acc;
+      }, {});
 
-        console.log(`📦 Got document for ${entryKey}, version:`, doc.version);
+      console.log('🗂️ Processing entries:', Object.keys(itemsByEntry).length);
 
-        // 2. Delete assets for this datastore
-        const itemPaths = items.map(item => item.fullPath);
-        const deleteResults = await Promise.allSettled(
-          items.map(item => 
+      // Process entries in parallel
+      await Promise.all(Object.entries(itemsByEntry).map(async ([entryKey, items]) => {
+        try {
+          const doc = await getDoc({
+            collection: "travel_entries",
+            key: entryKey
+          });
+
+          if (!doc) return;
+
+          // Delete all assets in parallel
+          await Promise.all(items.map(item => 
             deleteAsset({
               collection: 'travel_media',
               fullPath: item.fullPath
+            }).catch(error => {
+              console.error(`Failed to delete asset: ${item.fullPath}`, error);
+              setDeletionStatus(prev => ({
+                ...prev,
+                failed: prev.failed + 1
+              }));
             })
-            .then(() => {
-              console.log('✅ File deleted successfully:', item.fullPath);
-              return { fullPath: item.fullPath, success: true };
-            })
-            .catch((err) => {
-              console.error('❌ File deletion failed:', item.fullPath, err);
-              return { fullPath: item.fullPath, success: false };
-            })
-          )
-        );
+          ));
 
-        const successfulDeletes = deleteResults
-          .filter(result => result.value?.success)
-          .map(result => result.value.fullPath);
+          // Update document once
+          const updatedMedia = doc.data.media.filter(
+            media => !items.some(item => item.fullPath === media.fullPath)
+          );
 
-        console.log(`📊 Datastore ${entryKey} deletion results: ${successfulDeletes.length}/${items.length} files deleted`);
-
-        if (successfulDeletes.length === 0) {
-          console.warn(`⚠️ No files were deleted successfully for datastore ${entryKey}`);
-          continue; // Skip datastore update but continue with others
-        }
-
-        // 3. Update this datastore's document
-        const pathsToDelete = new Set(successfulDeletes);
-        let updatedMedia = doc.data.media.filter(
-          media => !pathsToDelete.has(media.fullPath)
-        );
-
-        console.log(`📝 Updating datastore ${entryKey} with ${updatedMedia.length} remaining items`);
-
-        // 4. Update Juno with retries for this datastore
-        let retries = 3;
-        while (retries > 0) {
-          try {
-            await setDoc({
-              collection: "travel_entries",
-              doc: {
-                key: entryKey,
-                version: doc.version,
-                data: {
-                  ...doc.data,
-                  media: updatedMedia
-                }
-              }
-            });
-            
-            console.log(`✅ Datastore ${entryKey} updated successfully`);
-            break;
-          } catch (err) {
-            console.error(`❌ Update failed for ${entryKey} (attempt ${4-retries}/3):`, err.message);
-            retries--;
-            
-            if (retries === 0) throw err;
-            
-            if (err.message?.includes('error_version_outdated_or_future')) {
-              const freshDoc = await getDoc({
-                collection: "travel_entries",
-                key: entryKey
-              });
-              
-              if (freshDoc) {
-                console.log(`📄 Version updated for ${entryKey}: ${doc.version} -> ${freshDoc.version}`);
-                doc.version = freshDoc.version;
-                updatedMedia = freshDoc.data.media.filter(
-                  media => !pathsToDelete.has(media.fullPath)
-                );
+          await setDoc({
+            collection: "travel_entries",
+            doc: {
+              key: entryKey,
+              version: doc.version,
+              data: {
+                ...doc.data,
+                media: updatedMedia
               }
             }
-            
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
+          });
+
+          setDeletionStatus(prev => ({
+            ...prev,
+            processed: prev.processed + items.length
+          }));
+
+        } catch (error) {
+          console.error(`❌ Error processing entry ${entryKey}:`, error);
+          setDeletionStatus(prev => ({
+            ...prev,
+            failed: prev.failed + items.length
+          }));
         }
-      }
+      }));
 
+      console.log('✅ Batch deletion completed');
       await loadEntries();
-      console.log('✅ All datastores processed successfully');
 
-    } catch (err) {
-      console.error('❌ Operation failed:', err);
-      setError('Failed to update datastores');
-    } finally {
-      setDeletingItems(prev => {
-        const newSet = new Set(prev);
-        allPaths.forEach(path => newSet.delete(path));
-        return newSet;
+      // Update progress
+      updateToast(toastId, {
+        progress: (deletionStatus.processed / deletionStatus.total) * 100
       });
+      
+      // On completion
+      updateToast(toastId, {
+        message: 'Successfully deleted items',
+        type: 'success',
+        persistent: false,
+        duration: 3000
+      });
+
+    } catch (error) {
+      console.error('❌ Batch deletion failed:', error);
+      setError('Failed to delete selected items');
+
+      updateToast(toastId, {
+        message: 'Failed to delete some items',
+        type: 'error',
+        persistent: false,
+        duration: 5000
+      });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  if (authLoading) {
-    return <div className="loading-container">Loading...</div>;
-  }
-
-  if (!user) {
-    return <div className="container">Please sign in to view the gallery</div>;
-  }
-
   return (
-    <div className="gallery-container" style={{ 
-      height: '100vh', 
-      overflowY: 'auto',
-      WebkitOverflowScrolling: 'touch',
-      padding: '20px',
-      boxSizing: 'border-box'
-    }}>
+    <div className="gallery-container">
       <h2>Travel Gallery</h2>
       {error && <div className="error-message">{error}</div>}
       {loading ? (

@@ -1,270 +1,179 @@
 import React, { useState, useEffect, useRef } from 'react';
 import '../styles/masonryGallery.css';
 
-const MasonryItem = ({ item, columnWidth, onDelete, isSelectable, isSelected, onSelect }) => {
-  const [loaded, setLoaded] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showDeleteButton, setShowDeleteButton] = useState(false);
-  const imageRef = useRef(null);
-  
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          if (item?.type?.startsWith('video/')) {
-            setLoaded(true);
-          } else {
-            const img = new Image();
-            img.src = item.downloadUrl;
-            img.onload = () => setLoaded(true);
-          }
-          observer.disconnect();
-        }
-      },
-      { rootMargin: '100px' }
-    );
-
-    if (imageRef.current) {
-      observer.observe(imageRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, [item?.downloadUrl, item?.type]);
-
-  const handleDeleteClick = (e) => {
-    e.stopPropagation();
-    setShowDeleteConfirm(true);
-    setShowDeleteButton(true);
-  };
-
-  const handleConfirmDelete = (e) => {
-    e.stopPropagation();
-    onDelete(item);
-    setShowDeleteConfirm(false);
-  };
-
-  const handleCancelDelete = (e) => {
-    e.stopPropagation();
-    setShowDeleteConfirm(false);
-    setShowDeleteButton(false);
-  };
-
-  const handleItemClick = () => {
-    if (isSelectable) {
-      onSelect(item);
-    }
-  };
-
-  const aspectRatio = item?.ratio || 1;
-  const itemHeight = columnWidth / aspectRatio;
-  const isVideo = item?.type?.startsWith('video/');
-
-  if (!item?.downloadUrl) {
-    return null; // Don't render items without downloadUrl
-  }
-
-  return (
-    <div 
-      className={`grid-item ${isSelected ? 'selected' : ''} ${isSelectable ? 'selectable' : ''}`}
-      style={{ 
-        width: `${columnWidth}px`,
-        height: `${itemHeight}px`,
-      }}
-      ref={imageRef}
-      onClick={handleItemClick}
-      onMouseEnter={() => setShowDeleteButton(true)}
-      onMouseLeave={() => {
-        if (!showDeleteConfirm) {
-          setShowDeleteButton(false);
-        }
-      }}
-    >
-      <div className="grid-item-content">
-        {!isSelectable && (showDeleteButton || showDeleteConfirm) && (
-          <button 
-            className="delete-button"
-            onClick={handleDeleteClick}
-            aria-label="Delete item"
-          >
-            ×
-          </button>
-        )}
-        
-        {showDeleteConfirm && (
-          <div className="delete-confirm">
-            <p>Delete this item?</p>
-            <div className="delete-actions">
-              <button onClick={handleConfirmDelete}>Yes</button>
-              <button onClick={handleCancelDelete}>No</button>
-            </div>
-          </div>
-        )}
-
-        {isSelectable && isSelected && (
-          <div className="select-indicator">✓</div>
-        )}
-
-        {isVideo ? (
-          <video
-            src={loaded ? item.downloadUrl : ''}
-            className="media-content"
-            style={{ opacity: loaded ? 1 : 0 }}
-            controls
-            playsInline
-            poster={item.thumbnailUrl}
-          />
-        ) : (
-          <>
-            <div 
-              className="color-placeholder"
-              style={{ 
-                backgroundColor: item.colors?.[0] ? 
-                  `rgb(${item.colors[0].r}, ${item.colors[0].g}, ${item.colors[0].b})` : 
-                  '#f0f0f0',
-                opacity: loaded ? 0 : 1
-              }}
-            />
-            <img
-              src={loaded ? item.downloadUrl : ''}
-              alt={item.originalName || 'Gallery image'}
-              className="media-content"
-              style={{ opacity: loaded ? 1 : 0 }}
-            />
-          </>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const MasonryGallery = ({ items, onDelete }) => {
-  const [columns, setColumns] = useState(3);
-  const [columnWidth, setColumnWidth] = useState(300);
+function MasonryGallery({ items, onDelete }) {
+  const [columns, setColumns] = useState([]);
+  const [selectedItems, setSelectedItems] = useState(new Set());
   const [isSelectMode, setIsSelectMode] = useState(false);
   const containerRef = useRef(null);
-  const resizeTimeoutRef = useRef(null);
-  const [selectedItems, setSelectedItems] = useState(new Set());
 
   useEffect(() => {
-    const updateLayout = () => {
-      if (!containerRef.current) return;
-      
-      const containerWidth = containerRef.current.offsetWidth;
-      const minColumnWidth = 250;
-      const maxColumns = Math.floor(containerWidth / minColumnWidth);
-      const newColumns = Math.max(1, maxColumns);
-      const newColumnWidth = Math.floor(containerWidth / newColumns);
-      
-      setColumns(newColumns);
-      setColumnWidth(newColumnWidth);
-    };
-
+    console.log('🎨 MasonryGallery mounted with', items.length, 'items');
+    calculateLayout();
+    
     const handleResize = () => {
-      if (resizeTimeoutRef.current) {
-        window.clearTimeout(resizeTimeoutRef.current);
-      }
-      resizeTimeoutRef.current = window.setTimeout(updateLayout, 100);
+      console.log('📏 Window resized, recalculating layout');
+      calculateLayout();
     };
-
-    updateLayout();
+    
     window.addEventListener('resize', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      if (resizeTimeoutRef.current) {
-        window.clearTimeout(resizeTimeoutRef.current);
-      }
-    };
-  }, []);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [items]);
 
-  const handleSelect = (item) => {
+  const calculateLayout = () => {
+    if (!containerRef.current) return;
+    
+    const containerWidth = containerRef.current.offsetWidth;
+    const minColumnWidth = 300;
+    const maxColumns = 4;
+    
+    // Calculate number of columns based on container width
+    const columnCount = Math.min(
+      maxColumns,
+      Math.max(1, Math.floor(containerWidth / minColumnWidth))
+    );
+    
+    console.log('📏 Container width:', containerWidth, 'Columns:', columnCount);
+    
+    // Initialize columns
+    const newColumns = Array(columnCount).fill().map(() => []);
+    
+    // Distribute items to achieve balanced column heights
+    items.forEach((item) => {
+      const shortestColumn = newColumns.reduce((minCol, col, i) => {
+        const currentHeight = col.reduce((sum, item) => sum + (1 / item.ratio), 0);
+        const minHeight = newColumns[minCol].reduce((sum, item) => sum + (1 / item.ratio), 0);
+        return currentHeight < minHeight ? i : minCol;
+      }, 0);
+      
+      newColumns[shortestColumn].push(item);
+    });
+
+    setColumns(newColumns);
+  };
+
+  const toggleSelectMode = () => {
+    console.log('🔄 Toggling select mode:', !isSelectMode);
+    setIsSelectMode(!isSelectMode);
+    if (isSelectMode) {
+      setSelectedItems(new Set());
+    }
+  };
+
+  const toggleItemSelection = (item) => {
+    if (!isSelectMode) return;
+    
+    console.log('🎯 Toggling selection for item:', item.key);
     setSelectedItems(prev => {
-      const newSelected = new Set(prev);
-      if (newSelected.has(item.fullPath)) {
-        newSelected.delete(item.fullPath);
+      const newSet = new Set(prev);
+      if (newSet.has(item.key)) {
+        newSet.delete(item.key);
+        console.log('❌ Removed item from selection:', item.key);
       } else {
-        newSelected.add(item.fullPath);
+        newSet.add(item.key);
+        console.log('✅ Added item to selection:', item.key);
       }
-      return newSelected;
+      return newSet;
     });
   };
 
   const handleDeleteSelected = () => {
-    const itemsToDelete = items.filter(item => selectedItems.has(item.key));
-    if (itemsToDelete.length > 0) {
-      console.log('🔍 Sending batch delete:', itemsToDelete.length, 'items');
-      onDelete(itemsToDelete);
-    }
+    console.log('🗑️ Delete button clicked');
+    const itemsToDelete = Array.from(selectedItems).map(key => 
+      items.find(item => item.key === key)
+    ).filter(Boolean);
     
-    setSelectedItems(new Set());
-  };
+    console.log('📦 Items prepared for deletion:', itemsToDelete);
+    
+    if (itemsToDelete.length === 0) {
+      console.warn('⚠️ No items selected for deletion');
+      return;
+    }
 
-  const distributeItems = () => {
-    const columnHeights = Array(columns).fill(0);
-    const columnItems = Array(columns).fill().map(() => []);
-
-    items.forEach(item => {
-      const shortestColumn = columnHeights.indexOf(Math.min(...columnHeights));
-      columnItems[shortestColumn].push(item);
-      columnHeights[shortestColumn] += columnWidth / (item.ratio || 1);
-    });
-
-    return columnItems;
+    if (window.confirm(`Are you sure you want to delete ${itemsToDelete.length} items?`)) {
+      console.log('✅ User confirmed deletion');
+      onDelete(itemsToDelete);
+      setSelectedItems(new Set());
+      setIsSelectMode(false);
+    } else {
+      console.log('❌ User cancelled deletion');
+    }
   };
 
   return (
-    <>
+    <div className="masonry-container">
       <div className="gallery-actions">
         <button 
           className="select-mode-button"
-          onClick={() => {
-            setIsSelectMode(!isSelectMode);
-            if (!isSelectMode) setSelectedItems(new Set());
-          }}
+          onClick={toggleSelectMode}
         >
           {isSelectMode ? 'Cancel Selection' : 'Select Items'}
         </button>
         
-        {selectedItems.size > 0 && (
-          <>
-            <button 
-              className="edit-selected-button"
-              onClick={() => {/* TODO: Implement edit functionality */}}
-            >
-              Edit Selected ({selectedItems.size})
-            </button>
-            <button 
-              className="delete-selected-button"
-              onClick={handleDeleteSelected}
-            >
-              Delete Selected ({selectedItems.size})
-            </button>
-          </>
+        {isSelectMode && selectedItems.size > 0 && (
+          <button 
+            className="delete-selected-button"
+            onClick={handleDeleteSelected}
+          >
+            Delete Selected ({selectedItems.size})
+          </button>
         )}
       </div>
 
       <div className="grid" ref={containerRef}>
-        {distributeItems().map((column, columnIndex) => (
+        {columns.map((column, columnIndex) => (
           <div 
-            key={columnIndex} 
+            key={columnIndex}
             className="grid-column"
-            style={{ width: `${100 / columns}%` }}
           >
-            {column.map((item) => (
-              <MasonryItem
-                key={item.fullPath}
-                item={item}
-                columnWidth={columnWidth - 1}
-                onDelete={onDelete}
-                isSelectable={isSelectMode}
-                isSelected={selectedItems.has(item.fullPath)}
-                onSelect={handleSelect}
-              />
+            {column.map(item => (
+              <div
+                key={item.key}
+                className={`grid-item ${isSelectMode ? 'selectable' : ''} ${
+                  selectedItems.has(item.key) ? 'selected' : ''
+                }`}
+                onClick={() => toggleItemSelection(item)}
+                style={{
+                  backgroundColor: item.backgroundColor,
+                  aspectRatio: item.ratio
+                }}
+              >
+                <div className="grid-item-content">
+                  {item.type?.startsWith('image/') ? (
+                    <img
+                      src={item.downloadUrl}
+                      alt=""
+                      className="media-content"
+                      loading="lazy"
+                      onLoad={(e) => {
+                        e.target.style.opacity = 1;
+                      }}
+                      style={{ opacity: 0 }}
+                    />
+                  ) : item.type?.startsWith('video/') ? (
+                    <video
+                      src={item.downloadUrl}
+                      className="media-content"
+                      controls
+                      loading="lazy"
+                      onLoadedData={(e) => {
+                        e.target.style.opacity = 1;
+                      }}
+                      style={{ opacity: 0 }}
+                    />
+                  ) : null}
+
+                  {selectedItems.has(item.key) && (
+                    <div className="select-indicator">✓</div>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         ))}
       </div>
-    </>
+    </div>
   );
-};
+}
 
 export default MasonryGallery; 
