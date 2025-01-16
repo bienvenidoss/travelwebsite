@@ -1,25 +1,211 @@
+/* Fix scrolling */
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  overflow-y: auto !important;
+}
+
+.gallery-container {
+  padding-bottom: 80px; /* Space for the deletion UI */
+}
+
 .packery-grid {
   width: 100%;
   margin: 0 auto;
-  padding: 0;
-  background: white;
 }
 
 .grid-item {
   position: relative;
+  cursor: pointer;
   overflow: hidden;
 }
 
-.grid-item.loading {
-  background-color: #f0f0f0;
+/* Delete trigger styling */
+.delete-trigger {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: all 0.2s ease;
+  z-index: 5;
+  cursor: pointer;
 }
 
+.delete-trigger svg {
+  color: white;
+  font-size: 14px;
+}
+
+.grid-item:hover .delete-trigger {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.delete-trigger:hover {
+  background: rgba(220, 53, 69, 0.9);
+  transform: scale(1.1) !important;
+}
+
+/* Fix the deletion UI to ensure it doesn't block scrolling */
+.deletion-ui {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.9) 0%,
+    rgba(0, 0, 0, 0.8) 100%
+  );
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 1rem;
+}
+
+.grid-item {
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.2s ease;
+  margin: 0;
+  padding: 0;
+}
+
+.grid-item:hover {
+  transform: scale(0.98);
+}
+
+.background-color {
+  transition: none;
+}
+
+.media-container {
+  opacity: 0;
+  animation: fadeIn 0.3s ease-in-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.grid-item img,
+.grid-item video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.selection-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.grid-item:hover .selection-overlay {
+  opacity: 1;
+}
+
+.grid-item.selected .selection-overlay {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.check-icon {
+  color: white;
+  font-size: 2rem;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: all 0.2s ease;
+}
+
+.grid-item.selected .check-icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Selection toolbar */
+.selection-toolbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 1rem;
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 1000;
+}
+
+.selection-toolbar.visible {
+  transform: translateY(0);
+}
+
+.selection-toolbar .count {
+  font-size: 1rem;
+}
+
+.selection-toolbar .actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.selection-toolbar button {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.selection-toolbar .delete-btn {
+  background: #dc3545;
+  color: white;
+}
+
+.selection-toolbar .cancel-btn {
+  background: transparent;
+  color: white;
+  border: 1px solid white;
+}
+
+.selection-toolbar button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+
+/* Shimmer effect */
 .shimmer-wrapper {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
+  right: 0;
+  bottom: 0;
   overflow: hidden;
 }
 
@@ -36,55 +222,45 @@
 }
 
 @keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
-.grid-item img,
-.grid-item video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+/* Remove any conflicting position styles */
+.grid-item,
+.grid-item * {
+  box-sizing: border-box;
 }
 
-.selected-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 123, 255, 0.3);
-  pointer-events: none;
-}
-
-.delete-button {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
-  border: none;
+.grid-item.selection-mode {
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  opacity: 0;
-  transition: opacity 0.2s;
 }
 
-.grid-item:hover .delete-button {
+.grid-item.selection-mode:hover .selection-overlay {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.grid-item.selection-mode:hover .check-icon {
+  opacity: 0.5;
+}
+
+.grid-item.selection-mode.selected:hover .check-icon {
   opacity: 1;
 }
 
-.delete-button:hover {
-  background: rgba(255, 0, 0, 0.9);
-  color: white;
+/* Add animation for new items */
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
-.grid-item:hover {
-  z-index: 1;
+.grid-item {
+  animation: fadeInScale 0.3s ease-out;
 } 

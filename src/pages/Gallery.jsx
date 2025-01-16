@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PackeryGallery from '../components/gallery/PackeryGallery';
-import DeleteBar from '../components/gallery/DeleteBar';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useGalleryData } from '../hooks/gallery/useGalleryData';
@@ -11,6 +10,7 @@ function Gallery() {
   const { user } = useAuth();
   const { addToast, updateToast } = useToast();
   const [selectedItems, setSelectedItems] = useState(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
   const activeToastRef = useRef(null);
   const { entries, loading, error, loadDatastore } = useGalleryData();
 
@@ -20,11 +20,19 @@ function Gallery() {
     }
   }, [user?.key]);
 
-  const handleDelete = useCallback((item) => {
+  const handleSelectItem = useCallback((item, startSelection = false) => {
+    if (startSelection) {
+      setIsSelectionMode(true);
+    }
+    
     setSelectedItems(prev => {
       const newSet = new Set(prev);
       if (newSet.has(item)) {
         newSet.delete(item);
+        // If no items left, exit selection mode
+        if (newSet.size === 0) {
+          setIsSelectionMode(false);
+        }
       } else {
         newSet.add(item);
       }
@@ -32,96 +40,118 @@ function Gallery() {
     });
   }, []);
 
+  const handleCancelSelection = () => {
+    setSelectedItems(new Set());
+    setIsSelectionMode(false);
+  };
+
   const deleteSelectedItems = async () => {
     if (selectedItems.size === 0) return;
 
     const toastId = Date.now();
     activeToastRef.current = toastId;
     
+    // Initial toast
     addToast({
       id: toastId,
       message: `Preparing to delete ${selectedItems.size} items...`,
       type: 'info',
       persistent: true,
-      progress: 0
+      progress: 0,
+      duration: 0 // No auto-dismiss for the progress toast
     });
 
     try {
+      // Group items by entry
       const itemsByEntry = Array.from(selectedItems).reduce((acc, item) => {
-        if (!acc[item.entryKey]) {
-          acc[item.entryKey] = [];
+        const entryKey = item.entryKey;
+        if (!acc[entryKey]) {
+          acc[entryKey] = [];
         }
-        acc[item.entryKey].push(item);
+        acc[entryKey].push(item);
         return acc;
       }, {});
 
-      let processedItems = 0;
-      let failedItems = 0;
-      const totalItems = selectedItems.size;
-
+      let successCount = 0;
+      // Process each entry
       for (const [entryKey, items] of Object.entries(itemsByEntry)) {
         const result = await updateEntryWithRetry(entryKey, items);
-        
-        if (result.success && !result.unchanged) {
-          processedItems += result.itemsProcessed || 0;
-          updateToast(toastId, {
-            message: `Deleting items... (${processedItems}/${totalItems})`,
-            progress: Math.round((processedItems / totalItems) * 100)
-          });
-        } else if (!result.success) {
-          failedItems += items.length;
+        if (result.success) {
+          successCount += result.itemsProcessed || 0;
+        } else {
+          console.error(`Failed to delete items from entry ${entryKey}`);
         }
       }
 
-      await loadDatastore();
-      
-      const message = failedItems > 0 
-        ? `Deleted ${processedItems} items, ${failedItems} failed`
-        : `Successfully deleted ${processedItems} items`;
-
+      // Success toast with auto-dismiss
       updateToast(toastId, {
-        message,
-        type: failedItems > 0 ? 'warning' : 'success',
+        message: `Successfully deleted ${successCount} items`,
+        type: 'success',
         persistent: false,
         progress: 100,
-        duration: 3000
+        duration: 3000 // Auto-dismiss after 3 seconds
       });
 
+      // Clear selection and reload data
       setSelectedItems(new Set());
+      setIsSelectionMode(false);
+      loadDatastore(user);
 
-    } catch (err) {
-      console.error('❌ Delete operation failed:', err);
+    } catch (error) {
+      console.error('Failed to delete items:', error);
+      // Error toast with auto-dismiss
       updateToast(toastId, {
-        message: `Operation failed: ${err.message}`,
+        message: 'Failed to delete items',
         type: 'error',
         persistent: false,
-        duration: 3000
+        progress: 100,
+        duration: 3000 // Auto-dismiss after 3 seconds
       });
     }
   };
 
   return (
-    <div className="gallery-container">
+    <>
+      <div className="gallery-container">
+        {error && <div className="error-message">{error}</div>}
+        {loading ? (
+          <div className="loading-container">Loading gallery...</div>
+        ) : entries.length === 0 ? (
+          <div className="empty-state">No photos yet</div>
+        ) : (
+          <PackeryGallery 
+            items={entries}
+            selectedItems={selectedItems}
+            onSelectItem={handleSelectItem}
+            isSelectionMode={isSelectionMode}
+          />
+        )}
+      </div>
+
       {selectedItems.size > 0 && (
-        <DeleteBar
-          itemCount={selectedItems.size}
-          onDelete={deleteSelectedItems}
-          onCancel={() => setSelectedItems(new Set())}
-        />
+        <div className="deletion-ui">
+          <div className="deletion-ui-content">
+            <span className="selection-count">
+              {selectedItems.size} item{selectedItems.size !== 1 ? 's' : ''} selected
+            </span>
+            <div className="deletion-actions">
+              <button 
+                className="cancel-button"
+                onClick={handleCancelSelection}
+              >
+                Cancel
+              </button>
+              <button 
+                className="delete-button"
+                onClick={deleteSelectedItems}
+              >
+                Delete Selected
+              </button>
+            </div>
+          </div>
+        </div>
       )}
-      {error && <div className="error-message">{error}</div>}
-      {loading ? (
-        <div className="loading-container">Loading gallery...</div>
-      ) : entries.length === 0 ? (
-        <div className="empty-state">No photos yet</div>
-      ) : (
-        <PackeryGallery 
-          items={entries}
-          onDelete={handleDelete}
-          selectedItems={selectedItems}
-        />
-      )}
-    </div>
+    </>
   );
 }
 

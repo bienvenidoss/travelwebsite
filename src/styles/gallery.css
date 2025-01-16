@@ -1,51 +1,92 @@
 .gallery-container {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+  position: relative;
   width: 100%;
-  height: 100%;
-  overflow: auto;
-  padding: 20px;
-  box-sizing: border-box;
-}
-
-.gallery-container h2 {
-  margin-bottom: 20px;
-}
-
-.error-message {
-  color: #dc3545;
+  min-height: 100vh;
   padding: 1rem;
-  margin-bottom: 1rem;
-  background-color: #f8d7da;
-  border-radius: 4px;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 
-.loading-container {
+/* Fixed position deletion UI */
+.deletion-ui {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  pointer-events: auto;
+}
+
+.deletion-ui-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
-  min-height: 200px;
-  color: #666;
+  color: white;
 }
 
+.selection-count {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.deletion-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.deletion-actions button {
+  padding: 0.5rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.deletion-actions button:hover {
+  transform: translateY(-1px);
+}
+
+.cancel-button {
+  background: transparent;
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+}
+
+.cancel-button:hover {
+  border-color: white !important;
+}
+
+.delete-button {
+  background: #dc3545;
+  color: white;
+}
+
+.delete-button:hover {
+  background: #c82333;
+}
+
+/* Loading and error states */
+.loading-container,
+.error-message,
 .empty-state {
   display: flex;
   justify-content: center;
   align-items: center;
   min-height: 200px;
   color: #666;
-  background-color: #f8f9fa;
-  border-radius: 8px;
+  font-size: 1.1rem;
 }
 
-@media (max-width: 768px) {
-  .gallery-container {
-    padding: 10px;
-  }
+.error-message {
+  color: #dc3545;
 }
 
-.gallery-container > div {
-  flex: 1;
-  width: 100%;
+/* Ensure proper stacking context */
+#root {
+  min-height: 100vh;
+  position: relative;
 } 

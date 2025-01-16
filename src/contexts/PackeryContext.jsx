@@ -80,8 +80,21 @@ export function PackeryProvider({ children }) {
     };
   }, []);
 
+  const removeItems = useCallback((elements) => {
+    if (!packeryInstance.current) return;
+
+    console.log('🗑️ Removing items from Packery');
+    packeryInstance.current.remove(elements);
+    packeryInstance.current.shiftLayout();
+  }, []);
+
   return (
-    <PackeryContext.Provider value={{ initializePackery, destroyPackery, relayout }}>
+    <PackeryContext.Provider value={{ 
+      initializePackery, 
+      destroyPackery, 
+      relayout,
+      removeItems 
+    }}>
       {children}
     </PackeryContext.Provider>
   );

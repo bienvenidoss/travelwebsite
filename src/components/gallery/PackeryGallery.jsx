@@ -1,48 +1,58 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { usePackery } from '../../contexts/PackeryContext';
 import GalleryItem from './GalleryItem';
 import { getNormalizedSize } from '../../utils/gallery/ratioCalculator';
 import '../../styles/packeryGallery.css';
 
-function PackeryGallery({ items, onDelete, selectedItems }) {
+function PackeryGallery({ items, onDelete, selectedItems, onSelectItem, isSelectionMode }) {
   const gridRef = useRef(null);
-  const { initializePackery, destroyPackery, relayout } = usePackery();
-  const layoutTimeout = useRef(null);
+  const itemRefs = useRef(new Map());
+  const { initializePackery, destroyPackery, relayout, removeItems } = usePackery();
 
-  // Initialize Packery immediately with placeholders
+  // Initialize Packery once
   useEffect(() => {
     if (gridRef.current) {
-      console.log('🏗️ Initial layout with placeholders');
       initializePackery(gridRef.current);
-      // Force initial layout
-      window.requestAnimationFrame(() => {
-        relayout();
-      });
     }
-    return () => {
-      if (layoutTimeout.current) {
-        window.cancelAnimationFrame(layoutTimeout.current);
-      }
-      destroyPackery();
-    };
+    return () => destroyPackery();
   }, []);
 
-  // Update layout when items change
+  // Handle layout updates when items change
   useEffect(() => {
     if (items.length > 0) {
-      if (layoutTimeout.current) {
-        window.cancelAnimationFrame(layoutTimeout.current);
-      }
-
-      layoutTimeout.current = window.requestAnimationFrame(() => {
-        console.log('📐 Updating layout with new items');
-        const cleanup = relayout();
-        return () => {
-          cleanup?.();
-        };
-      });
+      const cleanup = relayout();
+      return cleanup;
     }
-  }, [items, relayout]);
+  }, [items]);
+
+  const handleDelete = (item, element) => {
+    onDelete(item);
+    // Store the DOM element reference for later removal
+    itemRefs.current.set(item.key, element);
+  };
+
+  // Handle actual DOM removal when items are deleted
+  useEffect(() => {
+    const previousItems = new Set(Array.from(itemRefs.current.keys()));
+    const currentItems = new Set(items.map(item => item.key));
+    
+    // Find items that were in the previous set but not in the current set
+    const removedItems = Array.from(previousItems).filter(
+      key => !currentItems.has(key)
+    );
+
+    if (removedItems.length > 0) {
+      console.log('🗑️ Removing items from layout:', removedItems);
+      const elementsToRemove = removedItems
+        .map(key => itemRefs.current.get(key))
+        .filter(Boolean);
+
+      removeItems(elementsToRemove);
+
+      // Clean up references
+      removedItems.forEach(key => itemRefs.current.delete(key));
+    }
+  }, [items, removeItems]);
 
   return (
     <div className="packery-grid" ref={gridRef}>
@@ -52,7 +62,15 @@ function PackeryGallery({ items, onDelete, selectedItems }) {
           item={item}
           dimensions={getNormalizedSize(item.ratio || 1)}
           isSelected={selectedItems?.has(item)}
-          onDelete={onDelete}
+          onSelect={onSelectItem}
+          isSelectionMode={isSelectionMode}
+          ref={(el) => {
+            if (el) {
+              itemRefs.current.set(item.key, el);
+            } else {
+              itemRefs.current.delete(item.key);
+            }
+          }}
         />
       ))}
     </div>
