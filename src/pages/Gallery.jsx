@@ -4,6 +4,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useGalleryData } from '../hooks/gallery/useGalleryData';
 import { updateEntryWithRetry } from '../services/gallery/deleteService';
+import { 
+  STORAGE_COLLECTION, 
+  DATASTORE_COLLECTION,
+  deleteItems 
+} from '../services/gallery/storageService';
 import '../styles/gallery.css';
 
 function Gallery() {
@@ -51,45 +56,24 @@ function Gallery() {
     const toastId = Date.now();
     activeToastRef.current = toastId;
     
-    // Initial toast
     addToast({
       id: toastId,
-      message: `Preparing to delete ${selectedItems.size} items...`,
+      message: `Deleting ${selectedItems.size} items...`,
       type: 'info',
       persistent: true,
-      progress: 0,
-      duration: 0 // No auto-dismiss for the progress toast
+      progress: 0
     });
 
     try {
-      // Group items by entry
-      const itemsByEntry = Array.from(selectedItems).reduce((acc, item) => {
-        const entryKey = item.entryKey;
-        if (!acc[entryKey]) {
-          acc[entryKey] = [];
-        }
-        acc[entryKey].push(item);
-        return acc;
-      }, {});
+      await deleteItems(Array.from(selectedItems));
 
-      let successCount = 0;
-      // Process each entry
-      for (const [entryKey, items] of Object.entries(itemsByEntry)) {
-        const result = await updateEntryWithRetry(entryKey, items);
-        if (result.success) {
-          successCount += result.itemsProcessed || 0;
-        } else {
-          console.error(`Failed to delete items from entry ${entryKey}`);
-        }
-      }
-
-      // Success toast with auto-dismiss
+      // Success toast
       updateToast(toastId, {
-        message: `Successfully deleted ${successCount} items`,
+        message: `Successfully deleted ${selectedItems.size} items`,
         type: 'success',
         persistent: false,
         progress: 100,
-        duration: 3000 // Auto-dismiss after 3 seconds
+        duration: 3000
       });
 
       // Clear selection and reload data
@@ -99,13 +83,12 @@ function Gallery() {
 
     } catch (error) {
       console.error('Failed to delete items:', error);
-      // Error toast with auto-dismiss
       updateToast(toastId, {
         message: 'Failed to delete items',
         type: 'error',
         persistent: false,
         progress: 100,
-        duration: 3000 // Auto-dismiss after 3 seconds
+        duration: 3000
       });
     }
   };
